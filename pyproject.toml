@@ -1,0 +1,19 @@
+[project]
+name = "gemini-mongo-agent"
+version = "0.1.0"
+description = "A Gemini-on-Vertex-AI agent that uses MongoDB Atlas via MCP for grounded movie recommendations, with an agent-safety guardrail layer."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "google-adk>=0.4.0",
+  "mcp>=1.0.0",
+]
+license = { text = "Apache-2.0" }
+authors = [{ name = "Mukunda Katta" }]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["agent"]

@@ -1,0 +1,85 @@
+# gemini-mongo-agent
+
+A Gemini 2.0 Flash agent on Vertex AI that researches movies grounded in **MongoDB Atlas** via the official MongoDB MCP server, with an optional **agent-safety-mcp** guardrail layer for validation, egress, and trace diffs.
+
+Built for the Google Cloud Rapid Agent Hackathon — MongoDB track.
+
+## Architecture
+
+```
++--------------+          +---------------------+
+|   Browser    |  chat    |  ADK web UI on      |
+|  (judge)     +--------->|  Cloud Run          |
++--------------+          +----------+----------+
+                                     |
+                                     | function-calling loop
+                                     v
+                          +----------+----------+
+                          |  Gemini 2.0 Flash   |
+                          |  on Vertex AI       |
+                          +----------+----------+
+                                     |
+                  MCP stdio          |        MCP streamable-http
+        +------------------+         |         +-----------------------+
+        | MongoDB MCP      |<--------+-------->| agent-safety-mcp      |
+        | (--readOnly)     |                   | (optional guardrails) |
+        +--------+---------+                   +-----------------------+
+                 |
+                 | Atlas SRV URI
+                 v
+        +--------+---------+
+        | MongoDB Atlas    |
+        | sample_mflix     |
+        +------------------+
+```
+
+- **Read-only** MongoDB access (`--readOnly`) so a misbehaving model can't write or drop collections.
+- **Vector search** is available via the `$vectorSearch` aggregation stage if the Atlas index is configured.
+- **Safety layer**: validate_args / check_egress / diff_snapshot live in a separate MCP service for layered defense.
+
+## Local dev
+
+Requires Python 3.11+ and Node 22+ (for `npx mongodb-mcp-server`).
+
+```bash
+pip install -e .
+export MDB_MCP_CONNECTION_STRING='mongodb+srv://<user>:<pw>@<cluster>.mongodb.net/?retryWrites=true&w=majority'
+export GOOGLE_GENAI_USE_VERTEXAI=TRUE
+export GOOGLE_CLOUD_PROJECT=<your-project>
+export GOOGLE_CLOUD_LOCATION=us-central1
+# Optional: layer on the safety guardrails
+export AGENT_SAFETY_MCP_URL=https://agent-safety-mcp-444075785245.us-central1.run.app/mcp
+
+adk web .
+```
+
+Then open http://localhost:8000.
+
+## Deploy to Cloud Run
+
+```bash
+adk deploy cloud_run --project="$GOOGLE_CLOUD_PROJECT" \
+  --region=us-central1 --service_name=mongo-agent \
+  --with_ui --allow_origins='*' .
+```
+
+Make sure the Cloud Run service has these env vars set:
+- `GOOGLE_GENAI_USE_VERTEXAI=TRUE`
+- `GOOGLE_CLOUD_PROJECT`
+- `GOOGLE_CLOUD_LOCATION`
+- `MDB_MCP_CONNECTION_STRING`
+- `AGENT_SAFETY_MCP_URL` (optional)
+
+## What to ask it
+
+Once deployed against the Atlas `sample_mflix` dataset, try:
+
+- "Recommend three 1970s sci-fi movies with audience scores above 80."
+- "What are the most-rated movies directed by Hayao Miyazaki in this dataset?"
+- "Show me the top three comedies from the past decade by IMDB rating."
+
+The agent will call `aggregate` / `find` / `count` MCP tools on the `sample_mflix.movies` collection and ground every recommendation in real database rows.
+
+## License
+
+Apache 2.0
