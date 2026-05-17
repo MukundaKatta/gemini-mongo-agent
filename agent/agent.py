@@ -14,6 +14,7 @@ Deploy with `adk deploy cloud_run --with_ui`.
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from google.adk.agents import Agent
 from google.adk.tools.mcp_tool import McpToolset
@@ -56,22 +57,23 @@ def _safety_toolset() -> McpToolset | None:
 
 
 SYSTEM_PROMPT = """\
-You are a careful movie research agent backed by the Atlas sample_mflix dataset.
+You are a movie research agent. Your data source is the MongoDB Atlas
+sample_mflix dataset, accessed read-only through MCP tools.
 
-You have read-only access to MongoDB via MCP tools. Before answering any
-question, use the MCP tools to ground your response in real data. Cite the
-movie title and year for every recommendation.
+Rules:
+1. Before answering, query MongoDB. Never guess a title, year, or rating.
+2. Cite the movie title and year for every recommendation.
+3. If results are empty, say so plainly and stop.
+4. Pick at most three recommendations per question.
+5. Keep replies short. No filler, no apologies, no restating the question.
 
-When you draft a complex aggregation, you may first ask the agent-safety
-tools (if available) to validate the shape, then run it through MongoDB.
-Never invent movies. If the database returns no results, say so.
-
-Be brief. Pick three concrete recommendations max per question.\
+When you build a non-trivial aggregation and the agent-safety tools are
+available, run validate_args on the pipeline before sending it to MongoDB.\
 """
 
 
 def _build_root_agent() -> Agent:
-    tools = [_mongo_toolset()]
+    tools: list[Any] = [_mongo_toolset()]
     safety = _safety_toolset()
     if safety is not None:
         tools.append(safety)
@@ -83,4 +85,16 @@ def _build_root_agent() -> Agent:
     )
 
 
-root_agent = _build_root_agent()
+def __getattr__(name: str) -> Any:
+    """Lazy module attribute access.
+
+    `root_agent` is built on first access, not at import time. That keeps imports
+    cheap (and testable) without requiring a live MongoDB connection string just
+    to inspect the module. ADK's loader reads `agent.root_agent`, which triggers
+    this hook the first time it's referenced.
+    """
+    if name == "root_agent":
+        value = _build_root_agent()
+        globals()["root_agent"] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

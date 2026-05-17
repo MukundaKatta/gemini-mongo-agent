@@ -80,6 +80,27 @@ Once deployed against the Atlas `sample_mflix` dataset, try:
 
 The agent will call `aggregate` / `find` / `count` MCP tools on the `sample_mflix.movies` collection and ground every recommendation in real database rows.
 
+## Why this isn't an extension of pre-existing work
+
+The Rapid Agent rules require projects to be newly created during the contest period, not modifications or extensions of earlier work. The agent in this repo is brand new: every Python file in `agent/` was written from scratch during the contest window, and the git history starts inside that window. The two MCP servers it talks to (`mongodb-mcp-server`, published by MongoDB under Apache-2.0, and `agent-safety-mcp`) are consumed strictly over their public MCP protocol interface. There is no fork, no vendored copy, and no source-level modification of either. They are runtime dependencies, in the same sense a Cloud Run service depends on Vertex AI or the npm registry. The novel contribution is the agent itself: the prompt, the tool wiring, the Cloud Run packaging, and the safety-layer composition.
+
+## Tests
+
+```bash
+pip install -e . pytest
+pytest
+```
+
+The import smoke tests in `tests/test_imports.py` exercise the agent wiring without requiring a real Atlas connection or Vertex AI credentials.
+
+## Atlas setup
+
+See [`scripts/setup-atlas.md`](scripts/setup-atlas.md) for a short click-through to create a free M0 cluster, load the `sample_mflix` sample dataset, and copy the SRV connection string.
+
+## Demo video script
+
+The 3-minute screen-recording walkthrough used for the hackathon submission lives at [`docs/video-script.md`](docs/video-script.md).
+
 ## License
 
 Apache 2.0
