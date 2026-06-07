@@ -44,7 +44,9 @@ def test_root_agent_shape_with_stubbed_env(monkeypatch):
     from google.adk.agents import Agent
 
     fake_mongo_toolset = mock.MagicMock(name="mongo_toolset")
-    with mock.patch.object(agent_mod, "_mongo_toolset", return_value=fake_mongo_toolset):
+    with mock.patch.object(
+        agent_mod, "_mongo_toolset", return_value=fake_mongo_toolset
+    ):
         root = agent_mod.root_agent  # triggers lazy build via __getattr__
 
     assert isinstance(root, Agent)
@@ -70,8 +72,10 @@ def test_root_agent_attaches_safety_toolset_when_url_set(monkeypatch):
 
     fake_mongo = mock.MagicMock(name="mongo_toolset")
     fake_safety = mock.MagicMock(name="safety_toolset")
-    with mock.patch.object(agent_mod, "_mongo_toolset", return_value=fake_mongo), \
-         mock.patch.object(agent_mod, "_safety_toolset", return_value=fake_safety):
+    with (
+        mock.patch.object(agent_mod, "_mongo_toolset", return_value=fake_mongo),
+        mock.patch.object(agent_mod, "_safety_toolset", return_value=fake_safety),
+    ):
         root = agent_mod.root_agent
 
     assert list(root.tools) == [fake_mongo, fake_safety]
@@ -87,3 +91,51 @@ def test_missing_connection_string_raises_at_build_time(monkeypatch):
 
     with pytest.raises(RuntimeError, match="MDB_MCP_CONNECTION_STRING"):
         agent_mod._mongo_toolset()
+
+
+def test_safety_toolset_is_none_without_url(monkeypatch):
+    """`_safety_toolset` returns None when AGENT_SAFETY_MCP_URL is unset."""
+    monkeypatch.delenv("AGENT_SAFETY_MCP_URL", raising=False)
+    _reset_agent_module()
+
+    import agent.agent as agent_mod
+
+    assert agent_mod._safety_toolset() is None
+
+
+def test_package_root_agent_proxies_module(monkeypatch):
+    """`agent.root_agent` (package level) resolves to the same lazily built Agent."""
+    monkeypatch.setenv(
+        "MDB_MCP_CONNECTION_STRING",
+        "mongodb+srv://fake:fake@example.mongodb.net/?retryWrites=true",
+    )
+    monkeypatch.delenv("AGENT_SAFETY_MCP_URL", raising=False)
+    _reset_agent_module()
+
+    import agent as pkg
+    import agent.agent as agent_mod
+    from google.adk.agents import Agent
+
+    fake_mongo = mock.MagicMock(name="mongo_toolset")
+    with mock.patch.object(agent_mod, "_mongo_toolset", return_value=fake_mongo):
+        root = pkg.root_agent  # triggers package-level __getattr__ -> module build
+
+    assert isinstance(root, Agent)
+    assert root.name == "movie_research_agent"
+    # The package caches the resolved agent after first access.
+    assert vars(pkg)["root_agent"] is root
+
+
+def test_unknown_attribute_raises_attribute_error(monkeypatch):
+    """Both __getattr__ hooks raise AttributeError for unknown names."""
+    _reset_agent_module()
+
+    import pytest
+
+    import agent as pkg
+    import agent.agent as agent_mod
+
+    with pytest.raises(AttributeError):
+        pkg.does_not_exist
+    with pytest.raises(AttributeError):
+        agent_mod.does_not_exist
